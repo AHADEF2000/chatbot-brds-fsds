@@ -1,0 +1,126 @@
+import os
+import time
+from datetime import datetime, timezone,timedelta
+from flask import Flask, request, session, render_template, redirect, url_for
+from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
+
+app = Flask(__name__, static_folder="static", template_folder="templates")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
+
+client = OpenAI()  # Uses OPENAI_API_KEY
+MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1")
+VECTOR_STORE_ID = os.environ.get("VECTOR_STORE_ID", "").strip()
+
+# ------------- Helpers -------------
+
+def _ensure_history():
+    """Initialize a simple in-session chat history."""
+    if "chat" not in session:
+        session["chat"] = []  # list of dicts: {"role": "user"/"assistant", "text": "...", "time": "..."}
+    return session["chat"]
+
+def _now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+def _iso_to_local(ts: str) -> str:
+    """
+    Convert ISO timestamp (UTC) to Qatar local time (UTC+3)
+    and render it as a readable local time label.
+    """
+    try:
+        # Parse the incoming ISO string (replace Z → UTC)
+        dt_utc = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        # Convert to Qatar timezone (UTC+3)
+        qatar_tz = timezone(timedelta(hours=3))
+        dt_qatar = dt_utc.astimezone(qatar_tz)
+        # Format nicely
+        return dt_qatar.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return ""
+    
+def _to_responses_messages(chat):
+    """
+    Convert our session chat [{"role","text"}...] to the Responses API 'input' format.
+    You can prepend a system message here if you want to constrain behavior.
+    """
+    msgs = []
+    # Example: constrain the assistant (optional)
+    # msgs.append({"role": "system", "content": "You are a helpful assistant."})
+
+    for m in chat:
+        msgs.append({"role": m["role"], "content": m["text"]})
+    return msgs
+
+# ------------- Routes -------------
+
+@app.route("/", methods=["GET"])
+def home():
+    chat = _ensure_history()
+    # Convert stored ISO times to friendly strings for display
+    messages = []
+    for m in chat:
+        messages.append({
+            "role": m["role"],
+            "text": m["text"],
+            "time": _iso_to_local(m.get("time", "")),
+        })
+    return render_template("template.html", messages=messages)
+
+@app.route("/ask", methods=["POST"])
+def ask():
+    q = (request.form.get("q") or "").strip()
+    if not q:
+        return redirect(url_for("home"))
+
+    chat = _ensure_history()
+
+    # 1) Add the user message to our local history
+    chat.append({"role": "user", "text": q, "time": _now_iso()})
+    session.modified = True
+
+    # 2) Build Responses API payload
+    input_messages = _to_responses_messages(chat)
+
+    tools = []
+    if VECTOR_STORE_ID:
+        tools.append({
+            "type": "file_search",
+            "vector_store_ids": [VECTOR_STORE_ID]
+        })
+
+    try:
+        # 3) Call Responses API
+        resp = client.responses.create(
+            model=MODEL,
+            input=input_messages,   # multi-turn history
+            tools=tools if tools else None
+        )
+
+        # 4) Extract text (the SDK provides a convenience .output_text)
+        assistant_text = resp.output_text or ""
+        if not assistant_text:
+            # Fallback: try to be robust if SDK structure ever changes
+            assistant_text = "I didn't receive any text in the response."
+
+        # 5) Store assistant reply
+        chat.append({"role": "assistant", "text": assistant_text, "time": _now_iso()})
+        session.modified = True
+
+    except Exception as e:
+        # Surface the error to the chat
+        chat.append({"role": "assistant", "text": f"Error: {e}", "time": _now_iso()})
+        session.modified = True
+
+    return redirect(url_for("home"))
+
+@app.route("/reset", methods=["POST"])
+def reset():
+    session.pop("chat", None)
+    return redirect(url_for("home"))
+
+if __name__ == "__main__":
+    # Ensure OPENAI_API_KEY and VECTOR_STORE_ID (optional but recommended) are set
+    app.run(debug=True)

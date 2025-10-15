@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1,viewport-fit=cover"
+  />
+  <title>Smart Functional Support</title>
+  <style>
+    :root{
+      --bg: #0a0e1a;
+      --panel: #0d1117;
+      --card: #161b22;
+      --border: #30363d;
+      --border-hover: #484f58;
+      --text: #e6edf3;
+      --text-secondary: #7d8590;
+      --muted: #8b949e;
+      --accent: #8b5cf6;
+      --accent-2:#06b6d4;
+      --accent-glow: rgba(139,92,246,0.3);
+      --assistant:#1c2128;
+      --user:#1e40af;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+      --shadow-lg: 0 20px 60px rgba(0,0,0,0.6);
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(ellipse 1400px 900px at 20% 10%, rgba(139,92,246,0.12), transparent),
+        radial-gradient(ellipse 1200px 700px at 80% 90%, rgba(6,182,212,0.08), transparent),
+        linear-gradient(135deg, #0a0e1a 0%, #0d1117 50%, #0a0e1a 100%);
+      background-attachment: fixed;
+      display:flex; align-items:center; justify-content:center; padding:24px;
+    }
+
+    .frame{
+      width:100%; max-width:960px; min-height:70vh; max-height:86vh;
+      border:1px solid var(--border);
+      border-radius:16px;
+      background:rgba(13,17,23,0.85);
+      backdrop-filter: blur(20px) saturate(180%);
+      display:flex; flex-direction:column; overflow:hidden;
+      box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,0.03);
+      position:relative;
+    }
+
+    /* Subtle animated gradient border effect */
+    .frame::before{
+      content:'';
+      position:absolute;
+      inset:-1px;
+      border-radius:16px;
+      padding:1px;
+      background:linear-gradient(135deg, var(--accent), var(--accent-2), var(--accent));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity:0;
+      transition:opacity 0.3s ease;
+      pointer-events:none;
+    }
+    .frame:hover::before{
+      opacity:0.3;
+    }
+
+    .header{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:16px 20px; 
+      border-bottom:1px solid var(--border); 
+      background:rgba(22,27,34,0.6);
+      backdrop-filter:blur(8px);
+    }
+    .brand{
+      display:flex; gap:12px; align-items:center;
+      font-weight:600; font-size:15px; letter-spacing:-0.01em;
+    }
+    .brand .icon{
+      width:32px; height:32px; border-radius:8px;
+      background:linear-gradient(135deg, var(--accent), var(--accent-2));
+      display:flex; align-items:center; justify-content:center;
+      box-shadow: 0 0 20px var(--accent-glow), var(--shadow-sm);
+      position:relative;
+      overflow:hidden;
+    }
+    .brand .icon::before{
+      content:'';
+      position:absolute;
+      inset:0;
+      background:linear-gradient(45deg, transparent, rgba(255,255,255,0.2), transparent);
+      transform:translateX(-100%);
+      animation:shimmer 3s infinite;
+    }
+    @keyframes shimmer{
+      100%{ transform:translateX(100%); }
+    }
+    .brand .icon svg{
+      width:18px; height:18px; color:white; z-index:1;
+    }
+    
+    .header .actions{ display:flex; gap:8px; }
+    .btn{
+      appearance:none; 
+      border:1px solid var(--border); 
+      background:var(--card); 
+      color:var(--text);
+      padding:8px 14px; 
+      border-radius:8px; 
+      cursor:pointer; 
+      font-weight:500;
+      font-size:13px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow:var(--shadow-sm);
+    }
+    .btn:hover{ 
+      border-color:var(--border-hover); 
+      background:rgba(48,54,61,0.3);
+      transform: translateY(-1px);
+      box-shadow:var(--shadow-md);
+    }
+    .btn:active{
+      transform:translateY(0);
+    }
+    .btn.primary{
+      background:linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+      border:none; 
+      color:white;
+      font-weight:600;
+      box-shadow: 0 4px 12px rgba(139,92,246,0.3);
+    }
+    .btn.primary:hover{
+      box-shadow: 0 6px 16px rgba(139,92,246,0.4);
+      transform: translateY(-2px);
+    }
+
+    .chat{
+      flex:1; overflow:auto; padding:20px; scroll-behavior:smooth;
+      background:
+        radial-gradient(ellipse 1000px 600px at 50% 0%, rgba(139,92,246,0.05), transparent),
+        radial-gradient(ellipse 1000px 600px at 50% 100%, rgba(6,182,212,0.04), transparent);
+    }
+
+    /* Custom scrollbar */
+    .chat::-webkit-scrollbar{
+      width:8px;
+    }
+    .chat::-webkit-scrollbar-track{
+      background:transparent;
+    }
+    .chat::-webkit-scrollbar-thumb{
+      background:rgba(139,92,246,0.3);
+      border-radius:4px;
+    }
+    .chat::-webkit-scrollbar-thumb:hover{
+      background:rgba(139,92,246,0.5);
+    }
+
+    .msg{
+      display:flex; margin:12px 0; gap:10px; align-items:flex-start;
+    }
+    .msg.assistant{ justify-content:flex-start; }
+    .msg.user{ justify-content:flex-end; flex-direction:row-reverse; }
+    
+    .msg-icon{
+      width:32px; height:32px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      flex-shrink:0;
+      box-shadow:var(--shadow-sm);
+    }
+    .assistant .msg-icon{
+      background:linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+    .user .msg-icon{
+      background:linear-gradient(135deg, #3b82f6, #2563eb);
+      box-shadow: 0 0 12px rgba(59,130,246,0.3);
+    }
+    .msg-icon svg{
+      width:18px; height:18px; color:white;
+    }
+
+    .bubble{
+      max-width:75%;
+      padding:14px 16px; 
+      border-radius:12px; 
+      line-height:1.6;
+      white-space:pre-wrap; 
+      word-wrap:break-word;
+      border:1px solid var(--border);
+      box-shadow: var(--shadow-md);
+    }
+    .assistant .bubble{
+      background:var(--assistant);
+      border-bottom-left-radius:4px;
+    }
+    .user .bubble{
+      background:linear-gradient(135deg, #1e40af, #1e3a8a);
+      border-bottom-right-radius:4px;
+    }
+
+    .meta{
+      margin-top:6px; 
+      font-size:11px; 
+      color:var(--text-secondary);
+    }
+
+    .composer{
+      padding:16px 20px; 
+      border-top:1px solid var(--border); 
+      background:rgba(22,27,34,0.6);
+      backdrop-filter:blur(8px);
+    }
+    form.compose{
+      display:flex; gap:10px; align-items:flex-end;
+    }
+    .textbox{
+      flex:1; 
+      resize:none; 
+      min-height:48px; 
+      max-height:140px;
+      padding:14px 16px; 
+      border-radius:10px; 
+      border:1px solid var(--border);
+      background:var(--card); 
+      color:var(--text); 
+      outline:none;
+      font-size:14px;
+      line-height:1.5;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow:var(--shadow-sm);
+    }
+    .textbox:focus{ 
+      border-color:var(--accent); 
+      box-shadow: 0 0 0 3px var(--accent-glow), var(--shadow-md);
+    }
+    .send{
+      display:flex; gap:8px;
+    }
+    .send .btn{ 
+      height:48px; 
+      padding:0 20px;
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+    .loading{ 
+      display:none; 
+      align-items:center; 
+      gap:8px; 
+      color:var(--muted); 
+      font-size:13px;
+      font-weight:500;
+    }
+    .loading.show{ display:flex; }
+
+    /* Loading dots animation */
+    .loading-dots{
+      display:flex; 
+      gap:4px;
+    }
+    .loading-dots span{
+      width:6px; 
+      height:6px; 
+      border-radius:50%;
+      background:linear-gradient(135deg, var(--accent), var(--accent-2));
+      animation: bounce 1.4s infinite ease-in-out both;
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .loading-dots span:nth-child(1){ animation-delay:-0.32s; }
+    .loading-dots span:nth-child(2){ animation-delay:-0.16s; }
+    @keyframes bounce{
+      0%, 80%, 100%{ 
+        transform:scale(0.4) translateY(0); 
+        opacity:0.5; 
+      }
+      40%{ 
+        transform:scale(1) translateY(-4px); 
+        opacity:1; 
+      }
+    }
+
+    @media (max-width:600px){
+      .bubble{ max-width:85%; }
+      .frame{ min-height:85vh; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="header">
+      <div class="brand">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+        </div>
+        <span>Smart Functional Support</span>
+      </div>
+      <div class="actions">
+        <form method="post" action="/reset" onsubmit="return confirm('Start a new conversation?')">
+          <button class="btn" type="submit" title="Start over">Reset</button>
+        </form>
+
+      </div>
+    </div>
+
+    <div id="chat" class="chat">
+      {% if messages|length == 0 %}
+        <div class="msg assistant">
+          <div class="msg-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <div class="bubble">
+            👋 أنا المساعد الذكي للإجابة عن الأسئلة المستندة إلى وثائق BRD و FSD الرسمية.
+          </div>
+        </div>
+      {% endif %}
+
+      {% for m in messages %}
+        <div class="msg {{ m.role }}">
+          <div class="msg-icon">
+            {% if m.role == 'assistant' %}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+            {% else %}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+            {% endif %}
+          </div>
+          <div class="bubble">
+            {{ m.text }}
+            {% if m.time %}
+              <div class="meta">{{ m.role|capitalize }} • {{ m.time }}</div>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="composer">
+      <form class="compose" method="post" action="/ask" id="askForm">
+        <textarea
+          class="textbox"
+          name="q"
+          id="q"
+          placeholder="Type your question… (Shift+Enter for newline)"
+          rows="1"
+          required
+          autofocus
+        ></textarea>
+        <div class="send">
+          <div id="loading" class="loading">
+            <div class="loading-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <span>Thinking…</span>
+          </div>
+          <button class="btn primary" type="submit" id="sendBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+            Send
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const chat = document.getElementById('chat');
+    const form = document.getElementById('askForm');
+    const box = document.getElementById('q');
+    const loading = document.getElementById('loading');
+    const sendBtn = document.getElementById('sendBtn');
+
+    // Auto-scroll to bottom on load
+    function scrollToBottom(){
+      chat.scrollTop = chat.scrollHeight;
+    }
+    window.addEventListener('load', scrollToBottom);
+
+    // Grow textarea as user types
+    box.addEventListener('input', () => {
+      box.style.height = 'auto';
+      box.style.height = Math.min(box.scrollHeight, 140) + 'px';
+    });
+
+    // Enter to send, Shift+Enter for newline
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    // Show loading state on submit
+    form.addEventListener('submit', () => {
+      loading.classList.add('show');
+      sendBtn.disabled = true;
+      setTimeout(scrollToBottom, 50);
+    });
+  </script>
+</body>
+</html>

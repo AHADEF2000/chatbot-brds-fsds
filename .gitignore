@@ -1,0 +1,27 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Local configuration
+*.local
+instance/
+
+# IDE / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

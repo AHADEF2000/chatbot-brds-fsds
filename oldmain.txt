@@ -1,0 +1,121 @@
+import os
+import time
+from datetime import datetime
+from flask import Flask, request, session, render_template, redirect, url_for
+from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
+
+app = Flask(__name__, static_folder="static", template_folder="templates")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
+
+client = OpenAI()  # Uses OPENAI_API_KEY from env
+ASSISTANT_ID = os.environ.get("OPENAI_ASSISTANT_ID", "").strip()  # set in .env
+
+
+# ---------- Helpers ----------
+def get_or_create_thread_id():
+    """Create a new thread per user session if it doesn't exist."""
+    if "thread_id" not in session:
+        thread = client.beta.threads.create()
+        session["thread_id"] = thread.id
+    return session["thread_id"]
+
+
+def run_assistant(thread_id: str):
+    """Create a run for the assistant and poll until it finishes."""
+    if not ASSISTANT_ID:
+        raise RuntimeError("OPENAI_ASSISTANT_ID is not set in environment.")
+
+    run = client.beta.threads.runs.create(
+        thread_id=thread_id, assistant_id=ASSISTANT_ID
+    )
+    while True:
+        run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
+        if run.status in ("completed", "failed", "cancelled", "expired"):
+            break
+        time.sleep(0.6)
+
+
+def _msg_text_parts(m):
+    """Extract all text parts from a message content object safely."""
+    parts = []
+    for c in getattr(m, "content", []) or []:
+        if getattr(c, "type", None) == "text":
+            val = getattr(getattr(c, "text", None), "value", "")
+            if val:
+                parts.append(val)
+    return parts
+
+
+def _iso_to_local(ts: str) -> str:
+    """OpenAI returns ISO timestamps; render a readable local time label."""
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return dt.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return ""
+
+
+def list_thread_messages(thread_id: str, limit: int = 50):
+    """Return normalized messages for the UI."""
+    display = []
+    msgs = client.beta.threads.messages.list(
+        thread_id=thread_id, order="asc", limit=limit
+    )
+    for m in msgs.data:
+        if m.role not in ("user", "assistant"):
+            continue
+        text = "\n".join(_msg_text_parts(m)) if m.role == "assistant" else (
+            _msg_text_parts(m)[0] if _msg_text_parts(m) else ""
+        )
+        display.append(
+            {
+                "role": m.role,
+                "text": text,
+                "time": _iso_to_local(getattr(m, "created_at", "") or ""),
+            }
+        )
+    return display
+
+
+# ---------- Routes ----------
+@app.route("/", methods=["GET"])
+def home():
+    thread_id = session.get("thread_id")
+    messages = list_thread_messages(thread_id) if thread_id else []
+    return render_template("template.html", messages=messages)
+
+
+@app.route("/ask", methods=["POST"])
+def ask():
+    q = (request.form.get("q") or "").strip()
+    if not q:
+        return redirect(url_for("home"))
+
+    thread_id = get_or_create_thread_id()
+
+    # Create a user message
+    client.beta.threads.messages.create(
+        thread_id=thread_id,
+        role="user",
+        content=q,
+    )
+
+    # Run the assistant (blocking poll; simple UX)
+    run_assistant(thread_id)
+
+    return redirect(url_for("home"))
+
+
+@app.route("/reset", methods=["POST"])
+def reset():
+    """Clear the session to start fresh."""
+    session.pop("thread_id", None)
+    return redirect(url_for("home"))
+
+
+if __name__ == "__main__":
+    # Ensure OPENAI_API_KEY and OPENAI_ASSISTANT_ID are set
+    app.run(debug=True)

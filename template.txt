@@ -1,0 +1,221 @@
+#oldtemplate
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1,viewport-fit=cover"
+  />
+  <title>Assistant Chat</title>
+  <style>
+    :root{
+      --bg: #0f172a;           /* slate-900 */
+      --panel: #0b1222cc;      /* translucent for glass */
+      --card: #0b1222;         /* deep panel */
+      --border: #1f2a44;       /* slate border */
+      --text: #e5e7eb;         /* gray-200 */
+      --muted: #9aa4b2;        /* slate-400 */
+      --accent: #7c3aed;       /* violet-600 */
+      --accent-2:#22d3ee;      /* cyan-400 */
+      --assistant:#111827;     /* gray-900 bubble */
+      --user:#1d4ed8;          /* blue-700 bubble */
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      color:var(--text);
+      background:
+        radial-gradient(1000px 500px at 10% 10%, rgba(124,58,237,0.15), transparent 60%),
+        radial-gradient(800px 400px at 90% 30%, rgba(34,211,238,0.12), transparent 60%),
+        linear-gradient(180deg, #060914, #0a0f20 60%, #060914);
+      display:flex; align-items:center; justify-content:center; padding:24px;
+    }
+
+    .frame{
+      width:100%; max-width:900px; min-height:70vh; max-height:86vh;
+      border:1px solid var(--border);
+      border-radius:18px;
+      background:linear-gradient(180deg, rgba(17,24,39,0.85), rgba(11,18,34,0.9));
+      backdrop-filter: blur(8px);
+      display:flex; flex-direction:column; overflow:hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    .header{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 16px; border-bottom:1px solid var(--border); background:rgba(6,9,20,0.6)
+    }
+    .brand{
+      display:flex; gap:10px; align-items:center;
+      font-weight:700; letter-spacing:0.3px;
+    }
+    .brand .dot{
+      width:10px; height:10px; border-radius:50%;
+      background:linear-gradient(45deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 16px rgba(124,58,237,0.8);
+    }
+    .header .actions{ display:flex; gap:8px; }
+    .btn{
+      appearance:none; border:1px solid var(--border); background:#0b1222; color:var(--text);
+      padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600;
+    }
+    .btn:hover{ border-color:#2a3a62 }
+    .btn.primary{
+      background:linear-gradient(90deg, var(--accent), var(--accent-2));
+      border:none; color:white;
+    }
+
+    .chat{
+      flex:1; overflow:auto; padding:16px; scroll-behavior:smooth;
+      background:
+        radial-gradient(1200px 500px at 50% -10%, rgba(124,58,237,0.08), transparent 60%),
+        radial-gradient(1200px 500px at 50% 120%, rgba(34,211,238,0.06), transparent 60%);
+    }
+
+    .msg{
+      display:flex; margin:10px 0; gap:10px;
+    }
+    .msg.assistant{ justify-content:flex-start; }
+    .msg.user{ justify-content:flex-end; }
+
+    .bubble{
+      max-width:75%;
+      padding:12px 14px; border-radius:14px; line-height:1.45;
+      white-space:pre-wrap; word-wrap:break-word;
+      border:1px solid var(--border);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    }
+    .assistant .bubble{
+      background:var(--assistant);
+    }
+    .user .bubble{
+      background:linear-gradient(180deg, #1e40af, var(--user));
+    }
+
+    .meta{
+      margin-top:6px; font-size:12px; color:var(--muted);
+    }
+
+    .composer{
+      padding:12px; border-top:1px solid var(--border); background:rgba(6,9,20,0.6);
+    }
+    form.compose{
+      display:flex; gap:10px; align-items:flex-end;
+    }
+    .textbox{
+      flex:1; resize:none; min-height:44px; max-height:140px;
+      padding:12px 14px; border-radius:12px; border:1px solid var(--border);
+      background:#0b1222; color:var(--text); outline:none;
+    }
+    .textbox:focus{ border-color:#2a3a62; }
+    .send{
+      display:flex; gap:8px;
+    }
+    .send .btn{ height:44px; padding:0 14px; }
+    .loading{ display:none; align-items:center; gap:8px; color:var(--muted); font-size:14px; }
+    .loading.show{ display:flex; }
+
+    @media (max-width:600px){
+      .bubble{ max-width:85%; }
+      .frame{ min-height:85vh; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="header">
+      <div class="brand">
+        <span class="dot"></span>
+        <span>Assistant Chat</span>
+      </div>
+      <div class="actions">
+        <form method="post" action="/reset" onsubmit="return confirm('Start a new conversation?')">
+          <button class="btn" type="submit" title="Start over">Reset</button>
+        </form>
+        <a class="btn" href="https://platform.openai.com/" target="_blank" rel="noopener">OpenAI Console</a>
+      </div>
+    </div>
+
+    <div id="chat" class="chat">
+      {% if messages|length == 0 %}
+        <div class="msg assistant">
+          <div class="bubble">
+            👋 أنا المساعد الذكي للإجابة عن الأسئلة المستندة إلى وثائق BRD و FSD الرسمية.
+          </div>
+        </div>
+      {% endif %}
+
+      {% for m in messages %}
+        <div class="msg {{ m.role }}">
+          <div class="bubble">
+            {{ m.text }}
+            {% if m.time %}
+              <div class="meta">{{ m.role|capitalize }} • {{ m.time }}</div>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="composer">
+      <form class="compose" method="post" action="/ask" id="askForm">
+        <textarea
+          class="textbox"
+          name="q"
+          id="q"
+          placeholder="Type your question… (Shift+Enter for newline)"
+          rows="1"
+          required
+          autofocus
+        ></textarea>
+        <div class="send">
+          <div id="loading" class="loading">
+            <span>Thinking…</span>
+          </div>
+          <button class="btn primary" type="submit" id="sendBtn">Send</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const chat = document.getElementById('chat');
+    const form = document.getElementById('askForm');
+    const box = document.getElementById('q');
+    const loading = document.getElementById('loading');
+    const sendBtn = document.getElementById('sendBtn');
+
+    // Auto-scroll to bottom on load
+    function scrollToBottom(){
+      chat.scrollTop = chat.scrollHeight;
+    }
+    window.addEventListener('load', scrollToBottom);
+
+    // Grow textarea as user types
+    box.addEventListener('input', () => {
+      box.style.height = 'auto';
+      box.style.height = Math.min(box.scrollHeight, 140) + 'px';
+    });
+
+    // Enter to send, Shift+Enter for newline
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    // Show loading state on submit
+    form.addEventListener('submit', () => {
+      loading.classList.add('show');
+      sendBtn.disabled = true;
+      setTimeout(scrollToBottom, 50);
+    });
+  </script>
+</body>
+</html>
