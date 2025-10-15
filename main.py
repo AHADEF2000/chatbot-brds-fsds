@@ -209,5 +209,5 @@ def reset():
     return redirect(url_for("home"))
 
 if __name__ == "__main__":
-    # Ensure OPENAI_API_KEY and VECTOR_STORE_ID (optional but recommended) are set
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port, debug=False)
