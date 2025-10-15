@@ -25,3 +25,4 @@ instance/
 .idea/
 .DS_Store
 Thumbs.db
+test.txt

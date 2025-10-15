@@ -41,18 +41,96 @@ def _iso_to_local(ts: str) -> str:
     except Exception:
         return ""
     
-def _to_responses_messages(chat):
-    """
-    Convert our session chat [{"role","text"}...] to the Responses API 'input' format.
-    You can prepend a system message here if you want to constrain behavior.
-    """
-    msgs = []
-    # Example: constrain the assistant (optional)
-    # msgs.append({"role": "system", "content": "You are a helpful assistant."})
 
+
+BRD_FSD_SYSTEM = """
+You are an AI assistant specialized in answering questions only from official BRDs (Arabic) and FSDs (English)...
+Role:
+You are an AI assistant specialized in answering questions only from official Business Requirements Documents (BRDs) and Functional Specification Documents (FSDs).
+
+Your core purpose is to help users understand system workflows, processes, business rules, and requirements extracted from those documents.
+You must not answer questions outside the BRDs/FSDs domain.
+
+All factual answers must come exclusively from the indexed BRD (Arabic) and FSD (English) documents.
+
+Always reply in the same language as the user’s question.
+
+Provide a clear, structured answer.
+
+Always include citations from the retrieved documents  (if available) — specify:
+
+Document name
+
+Section name or heading
+
+Page number
+
+
+Be concise but faithful — summarize multiple chunks logically without changing their meaning.
+
+Never guess or assume. If no direct match is found, say clearly:
+
+“This question appears to be outside the scope of the BRDs and FSDs.”
+
+Support follow-up questions — retain context across turns within the session.
+
+If multiple related sections are found, merge insights and list all relevant sources.
+
+Maintain a professional, explanatory tone suitable for analysts or technical users.
+
+
+If the query concerns anything outside the BRD/FSD domain (e.g., religious, legal, personal, or unrelated technical questions):
+
+“I can only answer questions that are documented in the BRDs and FSDs.”
+
+If unsure, use:
+
+“This question appears to be outside the scope of the BRDs and FSDs.”
+
+
+Preserve the chat context to understand follow-up questions.
+
+If the user asks a follow-up like “What happens next?” — infer based on previous question context and retrieved document continuity.
+
+
+If user explicitly mentions “from BRDs” or “from FSDs”, obey that directive.
+
+If both exist and overlap, merge results from both indexes but tag each source clearly.
+"""
+
+def _to_responses_messages(chat):
+    msgs = [{"role": "system", "content": BRD_FSD_SYSTEM}]
     for m in chat:
         msgs.append({"role": m["role"], "content": m["text"]})
     return msgs
+
+
+def _extract_text_and_sources(resp):
+    text = getattr(resp, "output_text", "") or ""
+    sources = []
+    try:
+        for item in resp.output or []:
+            for block in getattr(item, "content", []) or []:
+                for ann in getattr(block, "annotations", []) or []:
+                    if getattr(ann, "type", None) == "file_citation":
+                        sources.append({
+                            "filename": getattr(ann, "filename", "file"),
+                            "page": getattr(ann, "page", None)
+                        })
+    except Exception:
+        pass
+    # de-dupe and append
+    seen, uniq = set(), []
+    for s in sources:
+        key = (s["filename"], s.get("page"))
+        if key not in seen:
+            seen.add(key); uniq.append(s)
+    if uniq:
+        text += "\n\nSources:\n"
+        for i, s in enumerate(uniq, 1):
+            page = f", p.{s['page']}" if s.get("page") else ""
+            text += f"{i}. {s['filename']}{page}\n"
+    return text
 
 # ------------- Routes -------------
 
@@ -77,44 +155,53 @@ def ask():
 
     chat = _ensure_history()
 
-    # 1) Add the user message to our local history
+    # 1) Add the user message
     chat.append({"role": "user", "text": q, "time": _now_iso()})
     session.modified = True
 
-    # 2) Build Responses API payload
+    # 2) Build messages with system policy
     input_messages = _to_responses_messages(chat)
 
-    tools = []
-    if VECTOR_STORE_ID:
-        tools.append({
-            "type": "file_search",
-            "vector_store_ids": [VECTOR_STORE_ID]
-        })
+    # 3) Build kwargs (robust to empty VECTOR_STORE_ID + old SDKs)
+    kwargs = {"model": MODEL, "input": input_messages}
 
-    try:
-        # 3) Call Responses API
-        resp = client.responses.create(
-            model=MODEL,
-            input=input_messages,   # multi-turn history
-            tools=tools if tools else None
-        )
+    has_store = bool(VECTOR_STORE_ID)
+    if has_store:
+        try:
+            # modern style
+            resp = client.responses.create(
+                **kwargs,
+                tools=[{"type": "file_search"}],
+                tool_resources={"file_search": {"vector_store_ids": [VECTOR_STORE_ID]}},
+            )
+        except TypeError:
+            # fallback for older SDKs
+            resp = client.responses.create(
+                **kwargs,
+                tools=[{
+                    "type": "file_search",
+                    "vector_store_ids": [VECTOR_STORE_ID],
+                }],
+            )
+    else:
+        # No vector store configured: still answer, but likely out-of-scope
+        resp = client.responses.create(**kwargs)
 
-        # 4) Extract text (the SDK provides a convenience .output_text)
-        assistant_text = resp.output_text or ""
-        if not assistant_text:
-            # Fallback: try to be robust if SDK structure ever changes
-            assistant_text = "I didn't receive any text in the response."
+    # 4) Extract text + citations (your helper)
+    assistant_text = _extract_text_and_sources(resp)
+    if has_store and "Sources:" not in assistant_text:
+        # Be strict only when a store exists
+        assistant_text = "This question appears to be outside the scope of the BRDs and FSDs."
 
-        # 5) Store assistant reply
-        chat.append({"role": "assistant", "text": assistant_text, "time": _now_iso()})
-        session.modified = True
+    if not assistant_text.strip():
+        assistant_text = "I didn't receive any text in the response."
 
-    except Exception as e:
-        # Surface the error to the chat
-        chat.append({"role": "assistant", "text": f"Error: {e}", "time": _now_iso()})
-        session.modified = True
+    # 5) Append assistant reply to chat
+    chat.append({"role": "assistant", "text": assistant_text, "time": _now_iso()})
+    session.modified = True
 
     return redirect(url_for("home"))
+
 
 @app.route("/reset", methods=["POST"])
 def reset():
@@ -122,5 +209,5 @@ def reset():
     return redirect(url_for("home"))
 
 if __name__ == "__main__":
-    # Ensure OPENAI_API_KEY and VECTOR_STORE_ID (optional but recommended) are set
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port, debug=False)

@@ -2,10 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta
-    name="viewport"
-    content="width=device-width,initial-scale=1,viewport-fit=cover"
-  />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Smart Functional Support</title>
   <style>
     :root{
@@ -52,7 +49,6 @@
       position:relative;
     }
 
-    /* Subtle animated gradient border effect */
     .frame::before{
       content:'';
       position:absolute;
@@ -105,7 +101,60 @@
       width:18px; height:18px; color:white; z-index:1;
     }
     
-    .header .actions{ display:flex; gap:8px; }
+    .header .actions{ display:flex; gap:8px; align-items:center; }
+    
+    .toggle-container{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:6px 12px;
+      background:var(--card);
+      border-radius:10px;
+      border:1px solid var(--border);
+    }
+    .toggle-label{
+      font-size:12px;
+      font-weight:600;
+      color:var(--text-secondary);
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+    }
+    .toggle-switch{
+      position:relative;
+      width:54px;
+      height:28px;
+      background:var(--border);
+      border-radius:14px;
+      cursor:pointer;
+      transition:all 0.3s ease;
+      border:2px solid var(--border-hover);
+    }
+    .toggle-switch.active{
+      background:linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-color:var(--accent);
+      box-shadow:0 0 12px var(--accent-glow);
+    }
+    .toggle-knob{
+      position:absolute;
+      top:2px;
+      left:2px;
+      width:20px;
+      height:20px;
+      background:white;
+      border-radius:50%;
+      transition:transform 0.3s ease;
+      box-shadow:0 2px 4px rgba(0,0,0,0.3);
+    }
+    .toggle-switch.active .toggle-knob{
+      transform:translateX(26px);
+    }
+    .toggle-text{
+      font-size:13px;
+      font-weight:600;
+      color:var(--text);
+      min-width:35px;
+    }
+    
     .btn{
       appearance:none; 
       border:1px solid var(--border); 
@@ -147,7 +196,6 @@
         radial-gradient(ellipse 1000px 600px at 50% 100%, rgba(6,182,212,0.04), transparent);
     }
 
-    /* Custom scrollbar */
     .chat::-webkit-scrollbar{
       width:8px;
     }
@@ -260,7 +308,6 @@
     }
     .loading.show{ display:flex; }
 
-    /* Loading dots animation */
     .loading-dots{
       display:flex; 
       gap:4px;
@@ -289,6 +336,15 @@
     @media (max-width:600px){
       .bubble{ max-width:85%; }
       .frame{ min-height:85vh; }
+      .toggle-container{
+        padding:4px 8px;
+      }
+      .toggle-label{
+        font-size:10px;
+      }
+      .toggle-text{
+        font-size:11px;
+      }
     }
   </style>
 </head>
@@ -304,10 +360,19 @@
         <span>Smart Functional Support</span>
       </div>
       <div class="actions">
+        <form method="post" action="/toggle_source" id="toggleForm">
+          <div class="toggle-container">
+            <span class="toggle-label">Source:</span>
+            <span class="toggle-text" id="sourceText">{{ source|upper }}</span>
+            <div class="toggle-switch {% if source == 'fsd' %}active{% endif %}" id="toggleSwitch">
+              <div class="toggle-knob"></div>
+            </div>
+          </div>
+        </form>
+        
         <form method="post" action="/reset" onsubmit="return confirm('Start a new conversation?')">
           <button class="btn" type="submit" title="Start over">Reset</button>
         </form>
-
       </div>
     </div>
 
@@ -321,6 +386,8 @@
           </div>
           <div class="bubble">
             👋 أنا المساعد الذكي للإجابة عن الأسئلة المستندة إلى وثائق BRD و FSD الرسمية.
+            <br><br>
+            Currently searching in: <strong>{{ source|upper }}</strong> documents
           </div>
         </div>
       {% endif %}
@@ -387,20 +454,24 @@
     const box = document.getElementById('q');
     const loading = document.getElementById('loading');
     const sendBtn = document.getElementById('sendBtn');
+    const toggleSwitch = document.getElementById('toggleSwitch');
+    const toggleForm = document.getElementById('toggleForm');
+    const sourceText = document.getElementById('sourceText');
 
-    // Auto-scroll to bottom on load
     function scrollToBottom(){
       chat.scrollTop = chat.scrollHeight;
     }
     window.addEventListener('load', scrollToBottom);
 
-    // Grow textarea as user types
+    toggleSwitch.addEventListener('click', () => {
+      toggleForm.submit();
+    });
+
     box.addEventListener('input', () => {
       box.style.height = 'auto';
       box.style.height = Math.min(box.scrollHeight, 140) + 'px';
     });
 
-    // Enter to send, Shift+Enter for newline
     box.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -408,7 +479,6 @@
       }
     });
 
-    // Show loading state on submit
     form.addEventListener('submit', () => {
       loading.classList.add('show');
       sendBtn.disabled = true;
